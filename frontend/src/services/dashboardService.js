@@ -5,24 +5,25 @@ export const dashboardService = {
   getStatistics: async (filters = {}) => {
     const params = new URLSearchParams(filters);
     const response = await api.get(`/dashboard/statistics?${params.toString()}`);
-    return response.data;
+    // Extract the 'data' field from the backend response
+    return response.data.data; // Changed from response.data
   },
 
   // Get revenue summary
   getRevenueSummary: async (days = 30) => {
     const response = await api.get(`/dashboard/revenue?period=${days}`);
-    return response.data;
+    return response.data.data; // Changed from response.data
   },
 
   // Get status breakdown
   getStatusBreakdown: async () => {
     const response = await api.get('/dashboard/status-breakdown');
-    return response.data;
+    return response.data.data; // Changed from response.data
   },
 
   // Get recent shipments
   getRecentShipments: async (limit = 10) => {
     const response = await api.get(`/dashboard/recent-shipments?limit=${limit}`);
-    return response.data;
+    return response.data.data; // Changed from response.data
   }
 };
