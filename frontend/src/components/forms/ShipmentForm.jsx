@@ -1,10 +1,10 @@
+// frontend/src/components/forms/ShipmentForm.jsx
 import React, { useState, useEffect } from 'react';
 import { useCreateShipment, useUpdateShipment } from '../../hooks/useShipments';
 import { SHIPMENT_STATUS, PAYMENT_METHODS } from '../../utils/constants';
 import { calculateChargesTotal } from '../../utils/helpers';
 import FormInput from './FormInput';
 import FormSelect from './FormSelect';
-import FormTextarea from './FormTextarea';
 import FormSection from './FormSection';
 import Loading from '../common/Loading';
 
@@ -55,13 +55,11 @@ const ShipmentForm = ({ shipment, onClose, onSuccess }) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // ---- Option 2: Destructure charges and add precise deps ----
+  // Destructure charges for precise dependencies
   const { baseCharge, other, insurance, extraDelivery, vat } = formData.charges;
 
-  // Auto-calc total whenever any charge field changes
+  // Auto-calculate total whenever any charge field changes
   useEffect(() => {
-    // Our helper sums base + insurance + extraDelivery + vat.
-    // Add "other" explicitly so it counts as well.
     const partial = calculateChargesTotal({
       base: baseCharge,
       insurance,
@@ -70,7 +68,6 @@ const ShipmentForm = ({ shipment, onClose, onSuccess }) => {
     });
     const total = num(partial) + num(other);
 
-    // Set the computed total back into form state
     setFormData(prev => ({
       ...prev,
       charges: { ...prev.charges, total: total.toFixed(2) },
@@ -115,7 +112,6 @@ const ShipmentForm = ({ shipment, onClose, onSuccess }) => {
 
     try {
       if (shipment?.id) {
-        // Our hook wrapper expects mutateAsync({ id, ...payload })
         await updateMutation.mutateAsync({ id: shipment.id, ...formData });
       } else {
         await createMutation.mutateAsync(formData);
@@ -205,7 +201,14 @@ const ShipmentForm = ({ shipment, onClose, onSuccess }) => {
             <FormInput label="Courier Name" name="courierName" value={formData.courierName} onChange={handleInputChange} error={errors.courierName} />
             <FormInput label="Staff No" name="staffNo" value={formData.staffNo} onChange={handleInputChange} error={errors.staffNo} />
             <div className="md:col-span-2">
-              <FormTextarea label="Notes" name="notes" value={formData.notes} onChange={handleInputChange} rows={3} error={errors.notes} />
+              <textarea
+                name="notes"
+                value={formData.notes}
+                onChange={handleInputChange}
+                placeholder="Additional notes..."
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
             </div>
           </FormSection>
 
