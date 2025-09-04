@@ -2,20 +2,21 @@ const { pool } = require('../config/database');
 
 const helpers = {
   // Generate next waybill number
-  generateWaybillNumber: async () => {
-    try {
-      const [rows] = await pool.execute(`
-        SELECT COALESCE(MAX(CAST(waybill_no AS UNSIGNED)), 10000) + 1 as next_number
-        FROM shipments 
-        WHERE waybill_no REGEXP '^[0-9]+
-      `);
-      
-      return rows[0].next_number.toString();
-    } catch (error) {
-      // Fallback to timestamp-based number
-      return Date.now().toString().slice(-8);
-    }
-  },
+ // In utils/helpers.js
+generateWaybillNumber: async () => {
+  try {
+    const [rows] = await pool.execute(`
+      SELECT COALESCE(MAX(CAST(waybill_no AS UNSIGNED)), 10000) + 1 as next_number
+      FROM shipments 
+      WHERE waybill_no REGEXP '^[0-9]+$'
+    `);
+    
+    return rows[0].next_number.toString();
+  } catch (error) {
+    console.error('Error generating waybill number:', error);
+    return Date.now().toString().slice(-8);
+  }
+},
 
   // Format currency
   formatCurrency: (amount, currency = 'KES') => {

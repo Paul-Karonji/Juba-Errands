@@ -7,9 +7,11 @@ const handleValidation = (req, res) => {
 };
 
 // Map incoming camelCase body to DB snake_case columns
+// Update the mapChargeBody function
 const mapChargeBody = (body) => ({
   shipment_id: body.shipmentId ?? null,
-  base: body.base ?? 0,
+  base_charge: body.baseCharge ?? 0,  // Changed from 'base' to 'base_charge'
+  other: body.other ?? 0,             // Added 'other' field
   insurance: body.insurance ?? 0,
   extra_delivery: body.extraDelivery ?? 0,
   vat: body.vat ?? 0,
