@@ -1,5 +1,5 @@
 const { validationResult } = require('express-validator');
-const pool = require('../config/database');
+const { pool } = require('../config/database');
 
 // Helpers
 const handleValidation = (req, res) => {

@@ -1,5 +1,5 @@
 const { validationResult } = require('express-validator');
-const pool = require('../config/database');
+const { pool } = require('../config/database');
 
 const handleValidation = (req, res) => {
   const errors = validationResult(req);
@@ -7,11 +7,10 @@ const handleValidation = (req, res) => {
 };
 
 // Map incoming camelCase body to DB snake_case columns
-// Update the mapChargeBody function
 const mapChargeBody = (body) => ({
   shipment_id: body.shipmentId ?? null,
-  base_charge: body.baseCharge ?? 0,  // Changed from 'base' to 'base_charge'
-  other: body.other ?? 0,             // Added 'other' field
+  base_charge: body.baseCharge ?? 0,  // ✅ fixed field name
+  other: body.other ?? 0,
   insurance: body.insurance ?? 0,
   extra_delivery: body.extraDelivery ?? 0,
   vat: body.vat ?? 0,
@@ -21,7 +20,7 @@ const mapChargeBody = (body) => ({
 exports.getAll = async (_req, res) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT id, shipment_id AS shipmentId, base, insurance, extra_delivery AS extraDelivery, vat, total, created_at
+      `SELECT id, shipment_id AS shipmentId, base_charge AS baseCharge, insurance, extra_delivery AS extraDelivery, vat, total, created_at
        FROM charges
        ORDER BY id DESC`
     );
@@ -36,7 +35,7 @@ exports.getById = async (req, res) => {
   try {
     const id = Number(req.params.id);
     const [rows] = await pool.execute(
-      `SELECT id, shipment_id AS shipmentId, base, insurance, extra_delivery AS extraDelivery, vat, total, created_at
+      `SELECT id, shipment_id AS shipmentId, base_charge AS baseCharge, insurance, extra_delivery AS extraDelivery, vat, total, created_at
        FROM charges WHERE id = ?`, [id]
     );
     if (!rows.length) return res.status(404).json({ message: 'Charges not found' });
@@ -51,7 +50,7 @@ exports.getByShipmentId = async (req, res) => {
   try {
     const shipmentId = Number(req.params.shipmentId);
     const [rows] = await pool.execute(
-      `SELECT id, shipment_id AS shipmentId, base, insurance, extra_delivery AS extraDelivery, vat, total, created_at
+      `SELECT id, shipment_id AS shipmentId, base_charge AS baseCharge, insurance, extra_delivery AS extraDelivery, vat, total, created_at
        FROM charges WHERE shipment_id = ?`, [shipmentId]
     );
     if (!rows.length) return res.status(404).json({ message: 'Charges for shipment not found' });
@@ -68,12 +67,12 @@ exports.create = async (req, res) => {
   try {
     const payload = mapChargeBody(req.body);
     const [result] = await pool.execute(
-      `INSERT INTO charges (shipment_id, base, insurance, extra_delivery, vat, total)
+      `INSERT INTO charges (shipment_id, base_charge, insurance, extra_delivery, vat, total)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [payload.shipment_id, payload.base, payload.insurance, payload.extra_delivery, payload.vat, payload.total]
+      [payload.shipment_id, payload.base_charge, payload.insurance, payload.extra_delivery, payload.vat, payload.total]
     );
     const [rows] = await pool.execute(
-      `SELECT id, shipment_id AS shipmentId, base, insurance, extra_delivery AS extraDelivery, vat, total, created_at
+      `SELECT id, shipment_id AS shipmentId, base_charge AS baseCharge, insurance, extra_delivery AS extraDelivery, vat, total, created_at
        FROM charges WHERE id = ?`, [result.insertId]
     );
     res.status(201).json(rows[0]);
@@ -94,13 +93,13 @@ exports.update = async (req, res) => {
     const payload = mapChargeBody(req.body);
     await pool.execute(
       `UPDATE charges
-       SET shipment_id = ?, base = ?, insurance = ?, extra_delivery = ?, vat = ?, total = ?
+       SET shipment_id = ?, base_charge = ?, insurance = ?, extra_delivery = ?, vat = ?, total = ?
        WHERE id = ?`,
-      [payload.shipment_id, payload.base, payload.insurance, payload.extra_delivery, payload.vat, payload.total, id]
+      [payload.shipment_id, payload.base_charge, payload.insurance, payload.extra_delivery, payload.vat, payload.total, id]
     );
 
     const [rows] = await pool.execute(
-      `SELECT id, shipment_id AS shipmentId, base, insurance, extra_delivery AS extraDelivery, vat, total, created_at
+      `SELECT id, shipment_id AS shipmentId, base_charge AS baseCharge, insurance, extra_delivery AS extraDelivery, vat, total, created_at
        FROM charges WHERE id = ?`, [id]
     );
     res.json(rows[0]);
