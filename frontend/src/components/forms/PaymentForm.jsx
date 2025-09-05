@@ -1,4 +1,3 @@
-// Fixed PaymentForm.jsx
 import React, { useEffect, useState } from 'react';
 import FormSection from './FormSection';
 import FormInput from './FormInput';
@@ -12,11 +11,11 @@ export default function PaymentForm({ entry = {}, shipmentId: forcedShipmentId, 
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [shipments, setShipments] = useState([]);
-  const [form, setForm] = useState({ 
-    shipmentId: '', 
-    payerAccountNo: '', 
-    paymentMethod: 'Cash', 
-    amountPaid: 0 
+  const [form, setForm] = useState({
+    shipmentId: '',
+    payerAccountNo: '',
+    paymentMethod: 'Cash',
+    amountPaid: 0
   });
 
   useEffect(() => {
@@ -62,15 +61,16 @@ export default function PaymentForm({ entry = {}, shipmentId: forcedShipmentId, 
       return;
     }
 
-    setIsLoading(true); 
+    setIsLoading(true);
     setErrors({});
     try {
       const payload = {
-        shipment_id: Number(form.shipmentId) || null,
+        shipment_id: Number(form.shipmentId),
         payer_account_no: form.payerAccountNo,
         payment_method: form.paymentMethod,
         amount_paid: Number(form.amountPaid) || 0,
       };
+      
       if (entry.id) {
         await updatePayment(entry.id, payload);
       } else {
@@ -79,8 +79,8 @@ export default function PaymentForm({ entry = {}, shipmentId: forcedShipmentId, 
       onSaved?.();
     } catch (err) {
       setErrors({ form: err.response?.data?.message || err.message });
-    } finally { 
-      setIsLoading(false); 
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -119,44 +119,43 @@ export default function PaymentForm({ entry = {}, shipmentId: forcedShipmentId, 
               </div>
             )}
             
-            <FormInput 
-              label="Payer Account No" 
-              name="payerAccountNo" 
-              value={form.payerAccountNo} 
+            <FormInput
+              label="Payer Account No"
+              name="payerAccountNo"
+              value={form.payerAccountNo}
               onChange={handleChange}
-              error={errors.payerAccountNo}
+              placeholder="Enter account number"
             />
-            <FormSelect 
-              label="Payment Method" 
-              name="paymentMethod" 
-              value={form.paymentMethod} 
-              onChange={handleChange} 
+            <FormSelect
+              label="Payment Method"
+              name="paymentMethod"
+              value={form.paymentMethod}
+              onChange={handleChange}
               options={METHODS}
-              error={errors.paymentMethod}
+              required
             />
-            <FormInput 
-              label="Amount Paid" 
-              name="amountPaid" 
-              type="number" 
-              step="0.01" 
-              min="0"
-              value={form.amountPaid} 
+            <FormInput
+              label="Amount Paid"
+              name="amountPaid"
+              type="number"
+              step="0.01"
+              value={form.amountPaid}
               onChange={handleChange}
-              error={errors.amountPaid}
+              required
             />
           </FormSection>
           
           <div className="flex justify-end gap-3 border-t pt-4">
-            <button 
-              type="button" 
-              onClick={onClose} 
+            <button
+              type="button"
+              onClick={onClose}
               className="px-4 py-2 border rounded"
             >
               Cancel
             </button>
-            <button 
-              type="submit" 
-              disabled={isLoading} 
+            <button
+              type="submit"
+              disabled={isLoading}
               className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
             >
               {isLoading ? 'Saving…' : 'Save'}

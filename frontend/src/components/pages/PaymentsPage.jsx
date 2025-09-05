@@ -28,14 +28,34 @@ export default function PaymentsPage() {
 
   const columns = [
     { key: 'id', label: 'ID' },
-    { key: 'shipmentId', label: 'Shipment ID' },
-    { key: 'payerAccountNo', label: 'Payer Account' },
-    { key: 'paymentMethod', label: 'Method' },
-    { key: 'amountPaid', label: 'Amount', render: (v) => v ? `${parseFloat(v).toFixed(2)}` : '—' },
+    { 
+      key: 'shipmentId', 
+      label: 'Shipment ID',
+      render: (_v, r) => r.shipment_id || r.shipmentId || '—'
+    },
+    { 
+      key: 'payerAccountNo', 
+      label: 'Payer Account',
+      render: (_v, r) => r.payer_account_no || r.payerAccountNo || '—'
+    },
+    { 
+      key: 'paymentMethod', 
+      label: 'Method',
+      render: (_v, r) => r.payment_method || r.paymentMethod || '—'
+    },
+    { 
+      key: 'amountPaid', 
+      label: 'Amount', 
+      render: (_v, r) => {
+        const value = r.amount_paid || r.amountPaid;
+        return value ? `KES ${parseFloat(value).toFixed(2)}` : '—';
+      }
+    },
   ];
 
   const onDelete = async (r) => {
-    if (!window.confirm(`Delete payment for shipment ${r.shipmentId}?`)) return;
+    const shipmentId = r.shipment_id || r.shipmentId;
+    if (!window.confirm(`Delete payment for shipment ${shipmentId}?`)) return;
     try {
       await deletePayment(r.id);
       load();

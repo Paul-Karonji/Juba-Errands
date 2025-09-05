@@ -43,143 +43,166 @@ const shipmentService = {
       }
 
       // Get total count
-      const countQuery = `
-        SELECT COUNT(*) as total
-        FROM shipments s
-        LEFT JOIN senders sen ON s.sender_id = sen.id
-        LEFT JOIN receivers rec ON s.receiver_id = rec.id
-        ${whereClause}
-      `;
+     
 
-      const [countResult] = await pool.execute(countQuery, queryParams);
-      const total = countResult[0]?.total || 0;
+  let countQuery;
+  let countParams = [...queryParams];
 
-      // Get paginated results - check if view exists first
-      let dataQuery;
+  try {
+    // Check if view exists
+    await pool.execute('SELECT 1 FROM v_shipment_details LIMIT 1');
+
+    // Use view for counting
+    const countWhereClause = whereClause
+      .replace(/sen\./g, 'sender_')
+      .replace(/rec\./g, 'receiver_')
+      .replace(/s\./g, '');
+
+    countQuery = `
+      SELECT COUNT(*) as total
+      FROM v_shipment_details
+      ${countWhereClause}
+    `;
+  } catch (viewError) {
+    // Fallback to direct join
+    countQuery = `
+      SELECT COUNT(*) as total
+      FROM shipments s
+      LEFT JOIN senders sen ON s.sender_id = sen.id
+      LEFT JOIN receivers rec ON s.receiver_id = rec.id
+      ${whereClause}
+    `;
+  }
+
+          const [countResult] = await pool.execute(countQuery, queryParams);
+        const total = countResult[0]?.total || 0;
+
+        // Get paginated results - check if view exists first
+        let dataQuery;
+        try {
+          // Try to use the view first
+          await pool.execute('SELECT 1 FROM v_shipment_details LIMIT 1');
+          
+          // View exists, modify where clause for view
+          const dataWhereClause = whereClause
+            .replace(/sen\./g, 'sender_')
+            .replace(/rec\./g, 'receiver_')
+            .replace(/s\./g, '');
+
+          dataQuery = `
+            SELECT * FROM v_shipment_details
+            ${dataWhereClause}
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+          `;
+        } catch (viewError) {
+          // View doesn't exist, use direct join query
+          console.log('View not found, using direct query');
+          dataQuery = `
+            SELECT 
+              s.*,
+              sen.name as sender_name,
+              COALESCE(sen.phone, sen.telephone) as sender_telephone,
+              sen.email as sender_email,
+              rec.name as receiver_name,
+              COALESCE(rec.phone, rec.telephone) as receiver_telephone,
+              rec.email as receiver_email,
+              c.base_charge,
+              c.other,
+              c.insurance,
+              c.extra_delivery,
+              c.vat,
+              c.total as charge_total,
+              c.currency,
+              p.payment_method,
+              p.amount_paid,
+              p.payer_account_no
+            FROM shipments s
+            LEFT JOIN senders sen ON s.sender_id = sen.id
+            LEFT JOIN receivers rec ON s.receiver_id = rec.id
+            LEFT JOIN charges c ON s.id = c.shipment_id
+            LEFT JOIN payments p ON s.id = p.shipment_id
+            ${whereClause}
+            ORDER BY s.created_at DESC
+            LIMIT ? OFFSET ?
+          `;
+        }
+
+        // Add limit and offset to query params
+        const dataQueryParams = [...queryParams, limitInt, offsetInt];
+        const [shipments] = await pool.execute(dataQuery, dataQueryParams);
+
+        return { 
+          shipments: shipments || [], 
+          total,
+          page: pageInt,
+          limit: limitInt,
+          totalPages: Math.ceil(total / limitInt)
+        };
+      } catch (error) {
+        console.error('Error in getAllShipments:', error);
+        console.error('Query params:', filters);
+        // Return empty result instead of throwing error
+        return {
+          shipments: [],
+          total: 0,
+          page: 1,
+          limit: 10,
+          totalPages: 0
+        };
+      }
+    },
+
+    // Get shipment by ID
+    getShipmentById: async (id) => {
       try {
-        // Try to use the view first
-        await pool.execute('SELECT 1 FROM v_shipment_details LIMIT 1');
-        
-        // View exists, modify where clause for view
-        const dataWhereClause = whereClause
-          .replace(/sen\./g, 'sender_')
-          .replace(/rec\./g, 'receiver_')
-          .replace(/s\./g, '');
+        const idInt = parseInt(id);
+        if (!idInt || idInt <= 0) {
+          throw new Error('Invalid shipment ID');
+        }
 
-        dataQuery = `
-          SELECT * FROM v_shipment_details
-          ${dataWhereClause}
-          ORDER BY created_at DESC
-          LIMIT ? OFFSET ?
-        `;
-      } catch (viewError) {
-        // View doesn't exist, use direct join query
-        console.log('View not found, using direct query');
-        dataQuery = `
-          SELECT 
-            s.*,
-            sen.name as sender_name,
-            COALESCE(sen.phone, sen.telephone) as sender_telephone,
-            sen.email as sender_email,
-            rec.name as receiver_name,
-            COALESCE(rec.phone, rec.telephone) as receiver_telephone,
-            rec.email as receiver_email,
-            c.base_charge,
-            c.other,
-            c.insurance,
-            c.extra_delivery,
-            c.vat,
-            c.total as charge_total,
-            c.currency,
-            p.payment_method,
-            p.amount_paid,
-            p.payer_account_no
-          FROM shipments s
-          LEFT JOIN senders sen ON s.sender_id = sen.id
-          LEFT JOIN receivers rec ON s.receiver_id = rec.id
-          LEFT JOIN charges c ON s.id = c.shipment_id
-          LEFT JOIN payments p ON s.id = p.shipment_id
-          ${whereClause}
-          ORDER BY s.created_at DESC
-          LIMIT ? OFFSET ?
-        `;
+        let query;
+        try {
+          // Try view first
+          await pool.execute('SELECT 1 FROM v_shipment_details LIMIT 1');
+          query = 'SELECT * FROM v_shipment_details WHERE id = ?';
+        } catch (viewError) {
+          // Use direct query
+          query = `
+            SELECT 
+              s.*,
+              sen.name as sender_name,
+              COALESCE(sen.phone, sen.telephone) as sender_telephone,
+              sen.email as sender_email,
+              rec.name as receiver_name,
+              COALESCE(rec.phone, rec.telephone) as receiver_telephone,
+              rec.email as receiver_email,
+              c.base_charge,
+              c.other,
+              c.insurance,
+              c.extra_delivery,
+              c.vat,
+              c.total as charge_total,
+              c.currency,
+              p.payment_method,
+              p.amount_paid,
+              p.payer_account_no
+            FROM shipments s
+            LEFT JOIN senders sen ON s.sender_id = sen.id
+            LEFT JOIN receivers rec ON s.receiver_id = rec.id
+            LEFT JOIN charges c ON s.id = c.shipment_id
+            LEFT JOIN payments p ON s.id = p.shipment_id
+            WHERE s.id = ?
+          `;
+        }
+
+        const [rows] = await pool.execute(query, [idInt]);
+        return rows[0] || null;
+      } catch (error) {
+        console.error('Error in getShipmentById:', error);
+        return null;
       }
-
-      // Add limit and offset to query params
-      const dataQueryParams = [...queryParams, limitInt, offsetInt];
-      const [shipments] = await pool.execute(dataQuery, dataQueryParams);
-
-      return { 
-        shipments: shipments || [], 
-        total,
-        page: pageInt,
-        limit: limitInt,
-        totalPages: Math.ceil(total / limitInt)
-      };
-    } catch (error) {
-      console.error('Error in getAllShipments:', error);
-      console.error('Query params:', filters);
-      // Return empty result instead of throwing error
-      return {
-        shipments: [],
-        total: 0,
-        page: 1,
-        limit: 10,
-        totalPages: 0
-      };
-    }
-  },
-
-  // Get shipment by ID
-  getShipmentById: async (id) => {
-    try {
-      const idInt = parseInt(id);
-      if (!idInt || idInt <= 0) {
-        throw new Error('Invalid shipment ID');
-      }
-
-      let query;
-      try {
-        // Try view first
-        await pool.execute('SELECT 1 FROM v_shipment_details LIMIT 1');
-        query = 'SELECT * FROM v_shipment_details WHERE id = ?';
-      } catch (viewError) {
-        // Use direct query
-        query = `
-          SELECT 
-            s.*,
-            sen.name as sender_name,
-            COALESCE(sen.phone, sen.telephone) as sender_telephone,
-            sen.email as sender_email,
-            rec.name as receiver_name,
-            COALESCE(rec.phone, rec.telephone) as receiver_telephone,
-            rec.email as receiver_email,
-            c.base_charge,
-            c.other,
-            c.insurance,
-            c.extra_delivery,
-            c.vat,
-            c.total as charge_total,
-            c.currency,
-            p.payment_method,
-            p.amount_paid,
-            p.payer_account_no
-          FROM shipments s
-          LEFT JOIN senders sen ON s.sender_id = sen.id
-          LEFT JOIN receivers rec ON s.receiver_id = rec.id
-          LEFT JOIN charges c ON s.id = c.shipment_id
-          LEFT JOIN payments p ON s.id = p.shipment_id
-          WHERE s.id = ?
-        `;
-      }
-
-      const [rows] = await pool.execute(query, [idInt]);
-      return rows[0] || null;
-    } catch (error) {
-      console.error('Error in getShipmentById:', error);
-      return null;
-    }
-  },
+    },
 
   // Get shipment by waybill number
   getByWaybillNumber: async (waybillNo) => {

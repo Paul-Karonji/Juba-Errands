@@ -28,16 +28,52 @@ export default function ChargesPage() {
 
   const columns = [
     { key: 'id', label: 'ID' },
-    { key: 'shipmentId', label: 'Shipment ID' },
-    { key: 'base', label: 'Base', render: (v) => v ? `${parseFloat(v).toFixed(2)}` : '—' },
-    { key: 'insurance', label: 'Insurance', render: (v) => v ? `${parseFloat(v).toFixed(2)}` : '—' },
-    { key: 'extraDelivery', label: 'Extra Delivery', render: (v) => v ? `${parseFloat(v).toFixed(2)}` : '—' },
-    { key: 'vat', label: 'VAT', render: (v) => v ? `${parseFloat(v).toFixed(2)}` : '—' },
-    { key: 'total', label: 'Total', render: (v) => v ? `${parseFloat(v).toFixed(2)}` : '—' },
+    { 
+      key: 'shipmentId', 
+      label: 'Shipment ID',
+      render: (_v, r) => r.shipment_id || r.shipmentId || '—'
+    },
+    { 
+      key: 'baseCharge', 
+      label: 'Base Charge', 
+      render: (_v, r) => {
+        const value = r.base_charge || r.baseCharge;
+        return value ? `KES ${parseFloat(value).toFixed(2)}` : '—';
+      }
+    },
+    { 
+      key: 'other', 
+      label: 'Other', 
+      render: (v) => v ? `KES ${parseFloat(v).toFixed(2)}` : '—' 
+    },
+    { 
+      key: 'insurance', 
+      label: 'Insurance', 
+      render: (v) => v ? `KES ${parseFloat(v).toFixed(2)}` : '—' 
+    },
+    { 
+      key: 'extraDelivery', 
+      label: 'Extra Delivery', 
+      render: (_v, r) => {
+        const value = r.extra_delivery || r.extraDelivery;
+        return value ? `KES ${parseFloat(value).toFixed(2)}` : '—';
+      }
+    },
+    { 
+      key: 'vat', 
+      label: 'VAT', 
+      render: (v) => v ? `KES ${parseFloat(v).toFixed(2)}` : '—' 
+    },
+    { 
+      key: 'total', 
+      label: 'Total', 
+      render: (v) => v ? `KES ${parseFloat(v).toFixed(2)}` : '—' 
+    },
   ];
 
   const onDelete = async (r) => {
-    if (!window.confirm(`Delete charges for shipment ${r.shipmentId}?`)) return;
+    const shipmentId = r.shipment_id || r.shipmentId;
+    if (!window.confirm(`Delete charges for shipment ${shipmentId}?`)) return;
     try {
       await deleteCharges(r.id);
       load();
