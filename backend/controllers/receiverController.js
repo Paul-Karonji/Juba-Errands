@@ -8,10 +8,16 @@ const handleValidation = (req, res) => {
 
 exports.getAll = async (_req, res) => {
   try {
-    const [rows] = await pool.execute('SELECT id, name, phone, email, address, created_at FROM receivers ORDER BY id DESC');
+    const [rows] = await pool.execute(`
+      SELECT id, name, COALESCE(phone, telephone) as phone, email, 
+             COALESCE(address, CONCAT_WS(', ', building_floor, street_address, estate_town)) as address, 
+             created_at 
+      FROM receivers 
+      ORDER BY id DESC
+    `);
     res.json(rows);
   } catch (err) {
-    console.error('receivers.getAll', err);
+    console.error('receivers.getAll error:', err);
     res.status(500).json({ message: 'Failed to fetch receivers' });
   }
 };
@@ -19,11 +25,17 @@ exports.getAll = async (_req, res) => {
 exports.getById = async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const [rows] = await pool.execute('SELECT id, name, phone, email, address, created_at FROM receivers WHERE id = ?', [id]);
+    const [rows] = await pool.execute(`
+      SELECT id, name, COALESCE(phone, telephone) as phone, email, 
+             COALESCE(address, CONCAT_WS(', ', building_floor, street_address, estate_town)) as address, 
+             created_at 
+      FROM receivers 
+      WHERE id = ?
+    `, [id]);
     if (!rows.length) return res.status(404).json({ message: 'Receiver not found' });
     res.json(rows[0]);
   } catch (err) {
-    console.error('receivers.getById', err);
+    console.error('receivers.getById error:', err);
     res.status(500).json({ message: 'Failed to fetch receiver' });
   }
 };
@@ -34,16 +46,19 @@ exports.create = async (req, res) => {
   try {
     const { name, phone = null, email = null, address = null } = req.body;
     const [result] = await pool.execute(
-      'INSERT INTO receivers (name, phone, email, address) VALUES (?, ?, ?, ?)',
-      [name, phone, email, address]
+      'INSERT INTO receivers (name, phone, telephone, email, address) VALUES (?, ?, ?, ?, ?)',
+      [name, phone, phone, email, address]
     );
     const [rows] = await pool.execute(
-      'SELECT id, name, phone, email, address, created_at FROM receivers WHERE id = ?',
+      `SELECT id, name, COALESCE(phone, telephone) as phone, email, 
+       COALESCE(address, CONCAT_WS(', ', building_floor, street_address, estate_town)) as address, 
+       created_at 
+       FROM receivers WHERE id = ?`,
       [result.insertId]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
-    console.error('receivers.create', err);
+    console.error('receivers.create error:', err);
     res.status(500).json({ message: 'Failed to create receiver' });
   }
 };
@@ -59,16 +74,19 @@ exports.update = async (req, res) => {
     if (!exists.length) return res.status(404).json({ message: 'Receiver not found' });
 
     await pool.execute(
-      'UPDATE receivers SET name = ?, phone = ?, email = ?, address = ? WHERE id = ?',
-      [name, phone, email, address, id]
+      'UPDATE receivers SET name = ?, phone = ?, telephone = ?, email = ?, address = ? WHERE id = ?',
+      [name, phone, phone, email, address, id]
     );
     const [rows] = await pool.execute(
-      'SELECT id, name, phone, email, address, created_at FROM receivers WHERE id = ?',
+      `SELECT id, name, COALESCE(phone, telephone) as phone, email, 
+       COALESCE(address, CONCAT_WS(', ', building_floor, street_address, estate_town)) as address, 
+       created_at 
+       FROM receivers WHERE id = ?`,
       [id]
     );
     res.json(rows[0]);
   } catch (err) {
-    console.error('receivers.update', err);
+    console.error('receivers.update error:', err);
     res.status(500).json({ message: 'Failed to update receiver' });
   }
 };
@@ -82,7 +100,7 @@ exports.remove = async (req, res) => {
     await pool.execute('DELETE FROM receivers WHERE id = ?', [id]);
     res.json({ success: true });
   } catch (err) {
-    console.error('receivers.remove', err);
+    console.error('receivers.remove error:', err);
     res.status(500).json({ message: 'Failed to delete receiver' });
   }
 };

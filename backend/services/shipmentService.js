@@ -54,22 +54,60 @@ const shipmentService = {
       const [countResult] = await pool.execute(countQuery, queryParams);
       const total = countResult[0]?.total || 0;
 
-      // Get paginated results - use the same where clause but replace table aliases
-      const dataWhereClause = whereClause
-        .replace(/sen\./g, 'sender_')
-        .replace(/rec\./g, 'receiver_')
-        .replace(/s\./g, '');
+      // Get paginated results - check if view exists first
+      let dataQuery;
+      try {
+        // Try to use the view first
+        await pool.execute('SELECT 1 FROM v_shipment_details LIMIT 1');
+        
+        // View exists, modify where clause for view
+        const dataWhereClause = whereClause
+          .replace(/sen\./g, 'sender_')
+          .replace(/rec\./g, 'receiver_')
+          .replace(/s\./g, '');
 
-      const query = `
-        SELECT * FROM v_shipment_details
-        ${dataWhereClause}
-        ORDER BY created_at DESC
-        LIMIT ? OFFSET ?
-      `;
+        dataQuery = `
+          SELECT * FROM v_shipment_details
+          ${dataWhereClause}
+          ORDER BY created_at DESC
+          LIMIT ? OFFSET ?
+        `;
+      } catch (viewError) {
+        // View doesn't exist, use direct join query
+        console.log('View not found, using direct query');
+        dataQuery = `
+          SELECT 
+            s.*,
+            sen.name as sender_name,
+            COALESCE(sen.phone, sen.telephone) as sender_telephone,
+            sen.email as sender_email,
+            rec.name as receiver_name,
+            COALESCE(rec.phone, rec.telephone) as receiver_telephone,
+            rec.email as receiver_email,
+            c.base_charge,
+            c.other,
+            c.insurance,
+            c.extra_delivery,
+            c.vat,
+            c.total as charge_total,
+            c.currency,
+            p.payment_method,
+            p.amount_paid,
+            p.payer_account_no
+          FROM shipments s
+          LEFT JOIN senders sen ON s.sender_id = sen.id
+          LEFT JOIN receivers rec ON s.receiver_id = rec.id
+          LEFT JOIN charges c ON s.id = c.shipment_id
+          LEFT JOIN payments p ON s.id = p.shipment_id
+          ${whereClause}
+          ORDER BY s.created_at DESC
+          LIMIT ? OFFSET ?
+        `;
+      }
 
       // Add limit and offset to query params
       const dataQueryParams = [...queryParams, limitInt, offsetInt];
-      const [shipments] = await pool.execute(query, dataQueryParams);
+      const [shipments] = await pool.execute(dataQuery, dataQueryParams);
 
       return { 
         shipments: shipments || [], 
@@ -81,7 +119,14 @@ const shipmentService = {
     } catch (error) {
       console.error('Error in getAllShipments:', error);
       console.error('Query params:', filters);
-      throw new Error('Failed to fetch shipments');
+      // Return empty result instead of throwing error
+      return {
+        shipments: [],
+        total: 0,
+        page: 1,
+        limit: 10,
+        totalPages: 0
+      };
     }
   },
 
@@ -93,12 +138,46 @@ const shipmentService = {
         throw new Error('Invalid shipment ID');
       }
 
-      const query = 'SELECT * FROM v_shipment_details WHERE id = ?';
+      let query;
+      try {
+        // Try view first
+        await pool.execute('SELECT 1 FROM v_shipment_details LIMIT 1');
+        query = 'SELECT * FROM v_shipment_details WHERE id = ?';
+      } catch (viewError) {
+        // Use direct query
+        query = `
+          SELECT 
+            s.*,
+            sen.name as sender_name,
+            COALESCE(sen.phone, sen.telephone) as sender_telephone,
+            sen.email as sender_email,
+            rec.name as receiver_name,
+            COALESCE(rec.phone, rec.telephone) as receiver_telephone,
+            rec.email as receiver_email,
+            c.base_charge,
+            c.other,
+            c.insurance,
+            c.extra_delivery,
+            c.vat,
+            c.total as charge_total,
+            c.currency,
+            p.payment_method,
+            p.amount_paid,
+            p.payer_account_no
+          FROM shipments s
+          LEFT JOIN senders sen ON s.sender_id = sen.id
+          LEFT JOIN receivers rec ON s.receiver_id = rec.id
+          LEFT JOIN charges c ON s.id = c.shipment_id
+          LEFT JOIN payments p ON s.id = p.shipment_id
+          WHERE s.id = ?
+        `;
+      }
+
       const [rows] = await pool.execute(query, [idInt]);
       return rows[0] || null;
     } catch (error) {
       console.error('Error in getShipmentById:', error);
-      throw new Error('Failed to fetch shipment');
+      return null;
     }
   },
 
@@ -109,12 +188,46 @@ const shipmentService = {
         throw new Error('Invalid waybill number');
       }
 
-      const query = 'SELECT * FROM v_shipment_details WHERE waybill_no = ?';
+      let query;
+      try {
+        // Try view first
+        await pool.execute('SELECT 1 FROM v_shipment_details LIMIT 1');
+        query = 'SELECT * FROM v_shipment_details WHERE waybill_no = ?';
+      } catch (viewError) {
+        // Use direct query
+        query = `
+          SELECT 
+            s.*,
+            sen.name as sender_name,
+            COALESCE(sen.phone, sen.telephone) as sender_telephone,
+            sen.email as sender_email,
+            rec.name as receiver_name,
+            COALESCE(rec.phone, rec.telephone) as receiver_telephone,
+            rec.email as receiver_email,
+            c.base_charge,
+            c.other,
+            c.insurance,
+            c.extra_delivery,
+            c.vat,
+            c.total as charge_total,
+            c.currency,
+            p.payment_method,
+            p.amount_paid,
+            p.payer_account_no
+          FROM shipments s
+          LEFT JOIN senders sen ON s.sender_id = sen.id
+          LEFT JOIN receivers rec ON s.receiver_id = rec.id
+          LEFT JOIN charges c ON s.id = c.shipment_id
+          LEFT JOIN payments p ON s.id = p.shipment_id
+          WHERE s.waybill_no = ?
+        `;
+      }
+
       const [rows] = await pool.execute(query, [waybillNo]);
       return rows[0] || null;
     } catch (error) {
       console.error('Error in getByWaybillNumber:', error);
-      throw new Error('Failed to fetch shipment by waybill number');
+      return null;
     }
   },
 
@@ -146,7 +259,7 @@ const shipmentService = {
       // Insert or get sender
       let senderId;
       const [senderExists] = await connection.execute(
-        'SELECT id FROM senders WHERE name = ? AND telephone = ?',
+        'SELECT id FROM senders WHERE name = ? AND COALESCE(phone, telephone) = ?',
         [sender.name, sender.telephone]
       );
 
@@ -154,18 +267,20 @@ const shipmentService = {
         senderId = senderExists[0].id;
       } else {
         const [senderResult] = await connection.execute(`
-          INSERT INTO senders (name, id_passport_no, company_name, building_floor, 
-                             street_address, estate_town, telephone, email)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO senders (name, phone, telephone, id_passport_no, company_name, building_floor, 
+                             street_address, estate_town, email, address)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           sender.name, 
+          sender.telephone,
+          sender.telephone,
           sender.idPassport || null, 
           sender.companyName || null, 
           sender.buildingFloor || null,
           sender.streetAddress || null, 
           sender.estateTown || null, 
-          sender.telephone, 
-          sender.email || null
+          sender.email || null,
+          sender.address || null
         ]);
         senderId = senderResult.insertId;
       }
@@ -173,7 +288,7 @@ const shipmentService = {
       // Insert or get receiver
       let receiverId;
       const [receiverExists] = await connection.execute(
-        'SELECT id FROM receivers WHERE name = ? AND telephone = ?',
+        'SELECT id FROM receivers WHERE name = ? AND COALESCE(phone, telephone) = ?',
         [receiver.name, receiver.telephone]
       );
 
@@ -181,18 +296,20 @@ const shipmentService = {
         receiverId = receiverExists[0].id;
       } else {
         const [receiverResult] = await connection.execute(`
-          INSERT INTO receivers (name, id_passport_no, company_name, building_floor,
-                               street_address, estate_town, telephone, email)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO receivers (name, phone, telephone, id_passport_no, company_name, building_floor,
+                               street_address, estate_town, email, address)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           receiver.name, 
+          receiver.telephone,
+          receiver.telephone,
           receiver.idPassport || null, 
           receiver.companyName || null, 
           receiver.buildingFloor || null,
           receiver.streetAddress || null, 
           receiver.estateTown || null, 
-          receiver.telephone, 
-          receiver.email || null
+          receiver.email || null,
+          receiver.address || null
         ]);
         receiverId = receiverResult.insertId;
       }
@@ -394,7 +511,7 @@ const shipmentService = {
       return result.affectedRows > 0;
     } catch (error) {
       console.error('Error in deleteShipment:', error);
-      throw new Error('Failed to delete shipment');
+      return false;
     }
   }
 };

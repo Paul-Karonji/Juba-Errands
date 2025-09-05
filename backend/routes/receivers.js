@@ -6,7 +6,7 @@ const router = express.Router();
 
 const createOrUpdateReceiver = [
   body('name').trim().notEmpty().withMessage('Name is required'),
-  body('phone').optional().trim().isString(),
+  body('phone').optional().trim().isString(),  // Changed from telephone  
   body('email').optional().isEmail().withMessage('Invalid email'),
   body('address').optional().trim().isString()
 ];

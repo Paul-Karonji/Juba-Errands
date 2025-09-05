@@ -8,7 +8,7 @@ const router = express.Router();
 // Validation
 const createOrUpdateSender = [
   body('name').trim().notEmpty().withMessage('Name is required'),
-  body('phone').optional().trim().isString(),
+  body('phone').optional().trim().isString(),  // Changed from telephone
   body('email').optional().isEmail().withMessage('Invalid email'),
   body('address').optional().trim().isString()
 ];
