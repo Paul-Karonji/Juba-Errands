@@ -8,6 +8,16 @@ import FormSelect from './FormSelect';
 import FormSection from './FormSection';
 import Loading from '../common/Loading';
 
+// Dummy options (replace with API-fetched sender/receiver lists)
+const senderOptions = [
+  { value: '1', label: 'Sender One' },
+  { value: '2', label: 'Sender Two' }
+];
+const receiverOptions = [
+  { value: '10', label: 'Receiver A' },
+  { value: '20', label: 'Receiver B' }
+];
+
 const num = (v) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
 
 const ShipmentForm = ({ shipment, onClose, onSuccess }) => {
@@ -15,15 +25,10 @@ const ShipmentForm = ({ shipment, onClose, onSuccess }) => {
   const updateMutation = useUpdateShipment();
 
   const [formData, setFormData] = useState({
+    waybillNo: shipment?.waybillNo || '',
     date: shipment?.date || new Date().toISOString().split('T')[0],
-    sender: shipment?.sender || {
-      name: '', idPassport: '', companyName: '', buildingFloor: '',
-      streetAddress: '', estateTown: '', telephone: '', email: ''
-    },
-    receiver: shipment?.receiver || {
-      name: '', idPassport: '', companyName: '', buildingFloor: '',
-      streetAddress: '', estateTown: '', telephone: '', email: ''
-    },
+    senderId: shipment?.senderId || '',
+    receiverId: shipment?.receiverId || '',
     quantity: shipment?.quantity || '',
     weightKg: shipment?.weightKg || '',
     description: shipment?.description || '',
@@ -55,10 +60,8 @@ const ShipmentForm = ({ shipment, onClose, onSuccess }) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // Destructure charges for precise dependencies
   const { baseCharge, other, insurance, extraDelivery, vat } = formData.charges;
 
-  // Auto-calculate total whenever any charge field changes
   useEffect(() => {
     const partial = calculateChargesTotal({
       base: baseCharge,
@@ -92,15 +95,12 @@ const ShipmentForm = ({ shipment, onClose, onSuccess }) => {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.sender.name) newErrors['sender.name'] = 'Sender name is required';
-    if (!formData.receiver.name) newErrors['receiver.name'] = 'Receiver name is required';
-    if (!formData.quantity) newErrors['quantity'] = 'Quantity is required';
-    if (!formData.weightKg) newErrors['weightKg'] = 'Weight is required';
-    if (!formData.description) newErrors['description'] = 'Description is required';
-
-    const emailOk = (v) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-    if (!emailOk(formData.sender.email)) newErrors['sender.email'] = 'Invalid email format';
-    if (!emailOk(formData.receiver.email)) newErrors['receiver.email'] = 'Invalid email format';
+    if (!formData.waybillNo) newErrors.waybillNo = 'Waybill number is required';
+    if (!formData.senderId) newErrors.senderId = 'Sender is required';
+    if (!formData.receiverId) newErrors.receiverId = 'Receiver is required';
+    if (!formData.quantity) newErrors.quantity = 'Quantity is required';
+    if (!formData.weightKg) newErrors.weightKg = 'Weight is required';
+    if (!formData.description) newErrors.description = 'Description is required';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -146,6 +146,15 @@ const ShipmentForm = ({ shipment, onClose, onSuccess }) => {
           {/* Basic Information */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormInput
+              label="Waybill Number"
+              name="waybillNo"
+              value={formData.waybillNo}
+              onChange={handleInputChange}
+              required
+              error={errors.waybillNo}
+              placeholder="e.g., WB2024001"
+            />
+            <FormInput
               label="Date"
               name="date"
               type="date"
@@ -164,28 +173,28 @@ const ShipmentForm = ({ shipment, onClose, onSuccess }) => {
             />
           </div>
 
-          {/* Sender Information */}
-          <FormSection title="Sender Information">
-            <FormInput label="Name" name="sender.name" value={formData.sender.name} onChange={handleInputChange} required error={errors['sender.name']} />
-            <FormInput label="ID/Passport No" name="sender.idPassport" value={formData.sender.idPassport} onChange={handleInputChange} error={errors['sender.idPassport']} />
-            <FormInput label="Company Name" name="sender.companyName" value={formData.sender.companyName} onChange={handleInputChange} error={errors['sender.companyName']} />
-            <FormInput label="Building/Floor" name="sender.buildingFloor" value={formData.sender.buildingFloor} onChange={handleInputChange} error={errors['sender.buildingFloor']} />
-            <FormInput label="Street Address" name="sender.streetAddress" value={formData.sender.streetAddress} onChange={handleInputChange} error={errors['sender.streetAddress']} />
-            <FormInput label="Estate/Town" name="sender.estateTown" value={formData.sender.estateTown} onChange={handleInputChange} error={errors['sender.estateTown']} />
-            <FormInput label="Telephone" name="sender.telephone" type="tel" value={formData.sender.telephone} onChange={handleInputChange} error={errors['sender.telephone']} />
-            <FormInput label="Email" name="sender.email" type="email" value={formData.sender.email} onChange={handleInputChange} error={errors['sender.email']} />
-          </FormSection>
-
-          {/* Receiver Information */}
-          <FormSection title="Receiver Information">
-            <FormInput label="Name" name="receiver.name" value={formData.receiver.name} onChange={handleInputChange} required error={errors['receiver.name']} />
-            <FormInput label="ID/Passport No" name="receiver.idPassport" value={formData.receiver.idPassport} onChange={handleInputChange} error={errors['receiver.idPassport']} />
-            <FormInput label="Company Name" name="receiver.companyName" value={formData.receiver.companyName} onChange={handleInputChange} error={errors['receiver.companyName']} />
-            <FormInput label="Building/Floor" name="receiver.buildingFloor" value={formData.receiver.buildingFloor} onChange={handleInputChange} error={errors['receiver.buildingFloor']} />
-            <FormInput label="Street Address" name="receiver.streetAddress" value={formData.receiver.streetAddress} onChange={handleInputChange} error={errors['receiver.streetAddress']} />
-            <FormInput label="Estate/Town" name="receiver.estateTown" value={formData.receiver.estateTown} onChange={handleInputChange} error={errors['receiver.estateTown']} />
-            <FormInput label="Telephone" name="receiver.telephone" type="tel" value={formData.receiver.telephone} onChange={handleInputChange} error={errors['receiver.telephone']} />
-            <FormInput label="Email" name="receiver.email" type="email" value={formData.receiver.email} onChange={handleInputChange} error={errors['receiver.email']} />
+          {/* Sender/Receiver */}
+          <FormSection title="Parties">
+            <FormSelect
+              label="Sender"
+              name="senderId"
+              value={formData.senderId}
+              onChange={handleInputChange}
+              options={senderOptions}
+              required
+              error={errors.senderId}
+              placeholder="Select a sender..."
+            />
+            <FormSelect
+              label="Receiver"
+              name="receiverId"
+              value={formData.receiverId}
+              onChange={handleInputChange}
+              options={receiverOptions}
+              required
+              error={errors.receiverId}
+              placeholder="Select a receiver..."
+            />
           </FormSection>
 
           {/* Shipment Details */}
