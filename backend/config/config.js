@@ -8,7 +8,7 @@ module.exports = {
       database: process.env.DB_NAME || 'juba_errands_nairobi'
     },
     jwt: {
-      secret: process.env.JWT_SECRET || 'your-secret-key',
+      secret: process.env.JWT_SECRET || 'juba-errands-secret-key-2024', // Add fallback
       expiresIn: '24h'
     }
   },
@@ -21,7 +21,7 @@ module.exports = {
       database: process.env.DB_NAME
     },
     jwt: {
-      secret: process.env.JWT_SECRET,
+      secret: process.env.JWT_SECRET || 'juba-errands-secret-key-2024', // Add fallback
       expiresIn: '24h'
     }
   }

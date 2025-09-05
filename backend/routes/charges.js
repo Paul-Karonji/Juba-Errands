@@ -7,7 +7,8 @@ const router = express.Router();
 // Charges are associated with a shipment
 const createOrUpdateCharges = [
   body('shipmentId').optional().isInt(),
-  body('base').optional().isFloat({ min: 0 }),
+  body('baseCharge').optional().isFloat({ min: 0 }),  // Changed from 'base'
+  body('other').optional().isFloat({ min: 0 }),
   body('insurance').optional().isFloat({ min: 0 }),
   body('extraDelivery').optional().isFloat({ min: 0 }),
   body('vat').optional().isFloat({ min: 0 }),
