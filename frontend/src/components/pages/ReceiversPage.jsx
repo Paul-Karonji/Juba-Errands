@@ -28,13 +28,35 @@ export default function ReceiversPage() {
     load();
   }, [load]);
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this receiver?')) {
+  const columns = [
+    { key: 'id', label: 'ID' },
+    { key: 'name', label: 'Name' },
+    { 
+      key: 'company', 
+      label: 'Company', 
+      render: (_v, r) => r.company_name || r.companyName || '—' 
+    },
+    { key: 'phone', label: 'Phone' },
+    { key: 'email', label: 'Email' },
+    { 
+      key: 'location', 
+      label: 'Location', 
+      render: (_v, r) => {
+        const estate = r.estate_town || r.estateTown;
+        const street = r.street_address || r.streetAddress;
+        if (estate && street) return `${estate}, ${street}`;
+        return estate || street || r.address || '—';
+      }
+    },
+  ];
+
+  const handleDelete = async (receiver) => {
+    if (!window.confirm(`Are you sure you want to delete receiver "${receiver.name}"?`)) {
       return;
     }
     
     try {
-      await deleteReceiver(id);
+      await deleteReceiver(receiver.id);
       await load(); // Reload the list after deletion
     } catch (e) {
       setError(e.response?.data?.message || e.message || 'Failed to delete receiver');
@@ -54,59 +76,34 @@ export default function ReceiversPage() {
     setEditing(null);
   };
 
-  const columns = [
-    { key: 'id', label: 'ID' },
-    { key: 'name', label: 'Name' },
-    { key: 'email', label: 'Email' },
-    { key: 'phone', label: 'Phone' },
-    { 
-      key: 'actions', 
-      label: 'Actions',
-      render: (row) => (
-        <div className="flex gap-2">
-          <button 
-            onClick={() => handleEdit(row)}
-            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-          >
-            Edit
-          </button>
-          <button 
-            onClick={() => handleDelete(row.id)}
-            className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
-          >
-            Delete
-          </button>
-        </div>
-      )
-    }
-  ];
-
-  if (loading) return <Loading />;
+  if (loading) return <Loading message="Loading receivers..." />;
 
   return (
-    <div className="receivers-page">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Receivers</h1>
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-semibold">Receivers</h2>
         <button 
           onClick={() => setEditing({})}
-          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
         >
-          Add New Receiver
+          New Receiver
         </button>
       </div>
 
-      {error && <ErrorMessage message={error} />}
+      {error && <ErrorMessage error={error} />}
 
       <DataTable 
         columns={columns}
         rows={rows}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
       />
 
-      {editing && (
+      {editing !== null && (
         <ReceiverForm
-          receiver={editing}
-          onSave={handleSave}
-          onCancel={handleCancel}
+          entry={editing && editing.id ? editing : {}}
+          onClose={handleCancel}
+          onSaved={handleSave}
         />
       )}
     </div>

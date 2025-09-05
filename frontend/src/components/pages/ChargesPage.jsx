@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import DataTable from '../common/DataTable';
-import ChargesForm from '../forms/Charges';
+import ChargesForm from '../forms/ChargesForm';
 import { listCharges, deleteCharges } from '../../services/charges';
 import Loading from '../common/Loading';
 import ErrorMessage from '../common/ErrorMessage';

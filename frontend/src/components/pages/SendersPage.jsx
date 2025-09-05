@@ -29,13 +29,27 @@ export default function SendersPage() {
   const columns = [
     { key: 'id', label: 'ID' },
     { key: 'name', label: 'Name' },
+    { 
+      key: 'company', 
+      label: 'Company', 
+      render: (_v, r) => r.company_name || r.companyName || '—' 
+    },
     { key: 'phone', label: 'Phone' },
     { key: 'email', label: 'Email' },
-    { key: 'address', label: 'Address' },
+    { 
+      key: 'location', 
+      label: 'Location', 
+      render: (_v, r) => {
+        const estate = r.estate_town || r.estateTown;
+        const street = r.street_address || r.streetAddress;
+        if (estate && street) return `${estate}, ${street}`;
+        return estate || street || r.address || '—';
+      }
+    },
   ];
 
   const onDelete = async (r) => {
-    if (!window.confirm(`Delete sender ${r.name}?`)) return;
+    if (!window.confirm(`Delete sender "${r.name}"?`)) return;
     try {
       await deleteSender(r.id);
       load();

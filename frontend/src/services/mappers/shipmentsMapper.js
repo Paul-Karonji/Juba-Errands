@@ -1,126 +1,91 @@
 // src/services/mappers/shipmentsMapper.js
 
-// Toggle this to match your backend:
-// - "flat": controllers expect flat columns (sender_name, receiver_name, weight_kg, etc.)
-// - "nested": controllers expect nested objects (sender:{}, receiver:{}, charges:{}, payment:{})
-export const API_SHAPE = "flat"; // "flat" | "nested"
+// Updated to match the actual database schema with foreign keys
+export const API_SHAPE = "flat";
 
 const n = (v) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
 
 export function mapFormToApi(form) {
-  if (API_SHAPE === "nested") {
-    // Send exactly what the form holds
-    return {
-      ...form,
-      charges: {
-        base: n(form.charges.baseCharge),
-        other: n(form.charges.other),
-        insurance: n(form.charges.insurance),
-        extraDelivery: n(form.charges.extraDelivery),
-        vat: n(form.charges.vat),
-        total: n(form.charges.total),
-      },
-    };
-  }
-
-  // Default: flat (most MySQL CRUD samples use snake_case columns)
+  // Map form data to database schema (snake_case with foreign keys)
   return {
+    waybill_no: form.waybillNo || form.waybill_no,
     date: form.date,
-    // sender_* columns
-    sender_name: form.sender?.name || "",
-    sender_id_passport: form.sender?.idPassport || "",
-    sender_company_name: form.sender?.companyName || "",
-    sender_building_floor: form.sender?.buildingFloor || "",
-    sender_street_address: form.sender?.streetAddress || "",
-    sender_estate_town: form.sender?.estateTown || "",
-    sender_telephone: form.sender?.telephone || "",
-    sender_email: form.sender?.email || "",
-
-    // receiver_* columns
-    receiver_name: form.receiver?.name || "",
-    receiver_id_passport: form.receiver?.idPassport || "",
-    receiver_company_name: form.receiver?.companyName || "",
-    receiver_building_floor: form.receiver?.buildingFloor || "",
-    receiver_street_address: form.receiver?.streetAddress || "",
-    receiver_estate_town: form.receiver?.estateTown || "",
-    receiver_telephone: form.receiver?.telephone || "",
-    receiver_email: form.receiver?.email || "",
-
-    quantity: n(form.quantity),
-    weight_kg: n(form.weightKg),
+    sender_id: parseInt(form.senderId || form.sender_id) || null,
+    receiver_id: parseInt(form.receiverId || form.receiver_id) || null,
+    quantity: parseInt(form.quantity) || 1,
+    weight_kg: parseFloat(form.weightKg || form.weight_kg) || 0,
     description: form.description || "",
-    commercial_value: n(form.commercialValue),
-    delivery_location: form.deliveryLocation || "",
-    status: form.status || "",
+    commercial_value: parseFloat(form.commercialValue || form.commercial_value) || 0,
+    delivery_location: form.deliveryLocation || form.delivery_location || "",
+    status: form.status || "Pending",
     notes: form.notes || "",
-    receipt_reference: form.receiptReference || "",
-    courier_name: form.courierName || "",
-    staff_no: form.staffNo || "",
+    receipt_reference: form.receiptReference || form.receipt_reference || "",
+    courier_name: form.courierName || form.courier_name || "",
+    staff_no: form.staffNo || form.staff_no || "",
 
-    // charges_* columns
-    base: n(form.charges?.baseCharge),
-    other: n(form.charges?.other),
-    insurance: n(form.charges?.insurance),
-    extra_delivery: n(form.charges?.extraDelivery),
-    vat: n(form.charges?.vat),
-    total: n(form.charges?.total),
+    // Charges (these will be handled separately in the backend)
+    base_charge: parseFloat(form.charges?.baseCharge || form.base_charge) || 0,
+    other: parseFloat(form.charges?.other || form.other) || 0,
+    insurance: parseFloat(form.charges?.insurance || form.insurance) || 0,
+    extra_delivery: parseFloat(form.charges?.extraDelivery || form.extra_delivery) || 0,
+    vat: parseFloat(form.charges?.vat || form.vat) || 0,
+    total: parseFloat(form.charges?.total || form.total) || 0,
 
-    // payment_* columns
-    payer_account_no: form.payment?.payerAccountNo || "",
-    payment_method: form.payment?.paymentMethod || "",
-    // amountPaid (if you capture it on create; otherwise backend computes)
+    // Payment (these will be handled separately in the backend)
+    payer_account_no: form.payment?.payerAccountNo || form.payer_account_no || "",
+    payment_method: form.payment?.paymentMethod || form.payment_method || "Cash",
+    amount_paid: parseFloat(form.payment?.amountPaid || form.amount_paid) || 0,
   };
 }
 
 export function mapApiToForm(row) {
-  // Normalizes either flat DB row or nested API to the form shape
+  // Handle both flat database rows and joined view results
   const get = (o, ...keys) => keys.reduce((v, k) => v ?? o?.[k], undefined);
 
-  const charges = {
-    baseCharge: get(row, "charges?.base", "base") ?? "",
-    other: get(row, "charges?.other", "other") ?? "",
-    insurance: get(row, "charges?.insurance", "insurance") ?? "",
-    extraDelivery: get(row, "charges?.extraDelivery", "extra_delivery") ?? "",
-    vat: get(row, "charges?.vat", "vat") ?? "",
-    total: get(row, "charges?.total", "total") ?? "",
-  };
-
   return {
+    id: row.id,
+    waybillNo: get(row, "waybill_no", "waybillNo") || "",
     date: row.date || "",
-    sender: {
-      name: get(row, "sender?.name", "sender_name") || "",
-      idPassport: get(row, "sender?.idPassport", "sender_id_passport") || "",
-      companyName: get(row, "sender?.companyName", "sender_company_name") || "",
-      buildingFloor: get(row, "sender?.buildingFloor", "sender_building_floor") || "",
-      streetAddress: get(row, "sender?.streetAddress", "sender_street_address") || "",
-      estateTown: get(row, "sender?.estateTown", "sender_estate_town") || "",
-      telephone: get(row, "sender?.telephone", "sender_telephone") || "",
-      email: get(row, "sender?.email", "sender_email") || "",
-    },
-    receiver: {
-      name: get(row, "receiver?.name", "receiver_name") || "",
-      idPassport: get(row, "receiver?.idPassport", "receiver_id_passport") || "",
-      companyName: get(row, "receiver?.companyName", "receiver_company_name") || "",
-      buildingFloor: get(row, "receiver?.buildingFloor", "receiver_building_floor") || "",
-      streetAddress: get(row, "receiver?.streetAddress", "receiver_street_address") || "",
-      estateTown: get(row, "receiver?.estateTown", "receiver_estate_town") || "",
-      telephone: get(row, "receiver?.telephone", "receiver_telephone") || "",
-      email: get(row, "receiver?.email", "receiver_email") || "",
-    },
-    quantity: get(row, "quantity") ?? "",
-    weightKg: get(row, "weightKg", "weight_kg") ?? "",
+    senderId: get(row, "sender_id", "senderId") || "",
+    receiverId: get(row, "receiver_id", "receiverId") || "",
+    quantity: get(row, "quantity") || "",
+    weightKg: get(row, "weight_kg", "weightKg") || "",
     description: row.description || "",
-    commercialValue: get(row, "commercialValue", "commercial_value") ?? "",
-    deliveryLocation: get(row, "deliveryLocation", "delivery_location") || "",
+    commercialValue: get(row, "commercial_value", "commercialValue") || "",
+    deliveryLocation: get(row, "delivery_location", "deliveryLocation") || "",
     status: row.status || "",
     notes: row.notes || "",
-    receiptReference: get(row, "receiptReference", "receipt_reference") || "",
-    courierName: get(row, "courierName", "courier_name") || "",
-    staffNo: get(row, "staffNo", "staff_no") || "",
-    charges,
-    payment: {
-      payerAccountNo: get(row, "payment?.payerAccountNo", "payer_account_no") || "",
-      paymentMethod: get(row, "payment?.paymentMethod", "payment_method") || "",
+    receiptReference: get(row, "receipt_reference", "receiptReference") || "",
+    courierName: get(row, "courier_name", "courierName") || "",
+    staffNo: get(row, "staff_no", "staffNo") || "",
+
+    // Handle charges - from separate charges table or embedded
+    charges: {
+      baseCharge: get(row, "base_charge", "charges?.baseCharge", "baseCharge") || "",
+      other: get(row, "other", "charges?.other") || "",
+      insurance: get(row, "insurance", "charges?.insurance") || "",
+      extraDelivery: get(row, "extra_delivery", "charges?.extraDelivery", "extraDelivery") || "",
+      vat: get(row, "vat", "charges?.vat") || "",
+      total: get(row, "total", "charge_total", "charges?.total") || "",
     },
+
+    // Handle payment - from separate payments table or embedded
+    payment: {
+      payerAccountNo: get(row, "payer_account_no", "payment?.payerAccountNo", "payerAccountNo") || "",
+      paymentMethod: get(row, "payment_method", "payment?.paymentMethod", "paymentMethod") || "Cash",
+      amountPaid: get(row, "amount_paid", "payment?.amountPaid", "amountPaid") || "",
+    },
+
+    // Additional fields that might come from the view
+    senderName: get(row, "sender_name", "senderName") || "",
+    receiverName: get(row, "receiver_name", "receiverName") || "",
+    senderEmail: get(row, "sender_email", "senderEmail") || "",
+    receiverEmail: get(row, "receiver_email", "receiverEmail") || "",
+    senderTelephone: get(row, "sender_telephone", "senderTelephone") || "",
+    receiverTelephone: get(row, "receiver_telephone", "receiverTelephone") || "",
+
+    // Timestamps
+    createdAt: get(row, "created_at", "createdAt") || "",
+    updatedAt: get(row, "updated_at", "updatedAt") || "",
   };
 }
