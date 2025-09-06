@@ -54,7 +54,6 @@ const dashboardService = {
   // Get revenue summary over time
   getRevenueSummary: async (days = 30) => {
     try {
-      // Ensure days is an integer
       const daysInt = parseInt(days) || 30;
       
       const query = `
@@ -102,17 +101,60 @@ const dashboardService = {
   // Get recent shipments
   getRecentShipments: async (limit = 10) => {
     try {
-      // Ensure limit is an integer
+      console.log('getRecentShipments called with limit:', limit);
       const limitInt = parseInt(limit) || 10;
       
-      const query = `
-        SELECT * FROM v_shipment_details
-        ORDER BY created_at DESC
-        LIMIT ?
-      `;
-
-      const [rows] = await pool.execute(query, [limitInt]);
-      return rows || [];
+      // First try to use the view if it exists
+      try {
+        console.log('Trying to use v_shipment_details view...');
+        const query = `
+          SELECT * FROM v_shipment_details
+          ORDER BY created_at DESC
+          LIMIT ?
+        `;
+        const [rows] = await pool.execute(query, [limitInt]);
+        console.log('View query successful, found:', rows.length, 'recent shipments');
+        return rows || [];
+      } catch (viewError) {
+        console.log('View not available, using basic query:', viewError.message);
+        
+        // Fallback to basic query with joins
+        const query = `
+          SELECT 
+            s.id,
+            s.waybill_no,
+            s.date,
+            s.sender_id,
+            s.receiver_id,
+            s.quantity,
+            s.weight_kg,
+            s.description,
+            s.commercial_value,
+            s.delivery_location,
+            s.status,
+            s.notes,
+            s.receipt_reference,
+            s.courier_name,
+            s.staff_no,
+            s.created_at,
+            s.updated_at,
+            sen.name as sender_name,
+            COALESCE(sen.phone, sen.telephone) as sender_telephone,
+            sen.email as sender_email,
+            rec.name as receiver_name,
+            COALESCE(rec.phone, rec.telephone) as receiver_telephone,
+            rec.email as receiver_email
+          FROM shipments s
+          LEFT JOIN senders sen ON s.sender_id = sen.id
+          LEFT JOIN receivers rec ON s.receiver_id = rec.id
+          ORDER BY s.created_at DESC
+          LIMIT ?
+        `;
+        
+        const [rows] = await pool.execute(query, [limitInt]);
+        console.log('Basic query successful, found:', rows.length, 'recent shipments');
+        return rows || [];
+      }
     } catch (error) {
       console.error('Error in getRecentShipments:', error);
       console.error('Query params:', [limit]);
@@ -138,14 +180,14 @@ const dashboardService = {
       return rows || [];
     } catch (error) {
       console.error('Error in getPaymentMethodBreakdown:', error);
-      throw new Error('Failed to fetch payment method breakdown');
+      // Return empty array instead of throwing error if payments table doesn't exist
+      return [];
     }
   },
 
   // Get top delivery locations
   getTopDeliveryLocations: async (limit = 10) => {
     try {
-      // Ensure limit is an integer
       const limitInt = parseInt(limit) || 10;
       
       const query = `

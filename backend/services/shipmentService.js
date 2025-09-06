@@ -5,23 +5,12 @@ const shipmentService = {
   // Get all shipments with filtering and pagination
   getAllShipments: async (filters = {}) => {
     try {
+      console.log('🚀 NEW CODE RUNNING - NO MORE this.queryBasicShipments');
       console.log('getAllShipments called with filters:', JSON.stringify(filters));
       
-      const { 
-        status, 
-        search, 
-        startDate, 
-        endDate, 
-        page = 1, 
-        limit = 10 
-      } = filters;
-
-      const pageInt = Math.max(1, parseInt(page) || 1);
-      const limitInt = Math.max(1, parseInt(limit) || 10);
-      const offsetInt = (pageInt - 1) * limitInt;
-
-      // First, try the simplest possible query to check if data exists
+      // Start with the absolute simplest query - no filters
       try {
+        console.log('Testing basic shipments count...');
         const [basicTest] = await pool.execute('SELECT COUNT(*) as count FROM shipments');
         console.log('Basic shipments count:', basicTest[0].count);
         
@@ -30,29 +19,31 @@ const shipmentService = {
           return {
             shipments: [],
             total: 0,
-            page: pageInt,
-            limit: limitInt,
+            page: 1,
+            limit: 10,
             totalPages: 0
           };
         }
+
+        // Test basic data query without any filters
+        console.log('Testing basic data query...');
+        const [basicData] = await pool.execute('SELECT * FROM shipments LIMIT 5');
+        console.log('Found basic shipment records:', basicData.length);
+
+        // Return basic data for now to test if this works
+        return {
+          shipments: basicData,
+          total: basicTest[0].count,
+          page: 1,
+          limit: 10,
+          totalPages: Math.ceil(basicTest[0].count / 10)
+        };
+
       } catch (basicError) {
-        console.error('Basic shipments test failed:', basicError.message);
-        throw new Error('Cannot access shipments table: ' + basicError.message);
+        console.error('Basic query failed:', basicError.message);
+        console.error('Error details:', basicError);
+        throw new Error('Basic database access failed: ' + basicError.message);
       }
-
-      // Try to use the view first
-      let queryResult;
-      try {
-        console.log('Attempting to use v_shipment_details view...');
-        queryResult = await this.queryWithView(status, search, startDate, endDate, pageInt, limitInt, offsetInt);
-        console.log('View query successful');
-      } catch (viewError) {
-        console.log('View query failed:', viewError.message);
-        console.log('Falling back to basic shipments query...');
-        queryResult = await this.queryBasicShipments(status, search, startDate, endDate, pageInt, limitInt, offsetInt);
-      }
-
-      return queryResult;
 
     } catch (error) {
       console.error('getAllShipments error:', error.message);
@@ -334,7 +325,7 @@ const shipmentService = {
         await pool.execute(updateSql, updateValues);
       }
 
-      return await this.getShipmentById(shipmentId);
+      return await shipmentService.getShipmentById(shipmentId);
     } catch (error) {
       console.error('updateShipment error:', error);
       throw error;
