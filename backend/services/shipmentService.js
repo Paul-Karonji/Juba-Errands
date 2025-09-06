@@ -3,8 +3,10 @@ const { generateWaybillNumber } = require('../utils/helpers');
 
 const shipmentService = {
   // Get all shipments with filtering and pagination
-  getAllShipments: async (filters) => {
+  getAllShipments: async (filters = {}) => {
     try {
+      console.log('getAllShipments called with filters:', JSON.stringify(filters));
+      
       const { 
         status, 
         search, 
@@ -14,242 +16,110 @@ const shipmentService = {
         limit = 10 
       } = filters;
 
-      // Ensure page and limit are integers
-      const pageInt = parseInt(page) || 1;
-      const limitInt = parseInt(limit) || 10;
+      const pageInt = Math.max(1, parseInt(page) || 1);
+      const limitInt = Math.max(1, parseInt(limit) || 10);
       const offsetInt = (pageInt - 1) * limitInt;
 
-      let whereClause = 'WHERE 1=1';
-      const queryParams = [];
-
-      if (status) {
-        whereClause += ' AND s.status = ?';
-        queryParams.push(status);
-      }
-
-      if (search) {
-        whereClause += ' AND (s.waybill_no LIKE ? OR sen.name LIKE ? OR rec.name LIKE ?)';
-        queryParams.push(`%${search}%`, `%${search}%`, `%${search}%`);
-      }
-
-      if (startDate) {
-        whereClause += ' AND s.date >= ?';
-        queryParams.push(startDate);
-      }
-
-      if (endDate) {
-        whereClause += ' AND s.date <= ?';
-        queryParams.push(endDate);
-      }
-
-      // Get total count
-     
-
-  let countQuery;
-  let countParams = [...queryParams];
-
-  try {
-    // Check if view exists
-    await pool.execute('SELECT 1 FROM v_shipment_details LIMIT 1');
-
-    // Use view for counting
-    const countWhereClause = whereClause
-      .replace(/sen\./g, 'sender_')
-      .replace(/rec\./g, 'receiver_')
-      .replace(/s\./g, '');
-
-    countQuery = `
-      SELECT COUNT(*) as total
-      FROM v_shipment_details
-      ${countWhereClause}
-    `;
-  } catch (viewError) {
-    // Fallback to direct join
-    countQuery = `
-      SELECT COUNT(*) as total
-      FROM shipments s
-      LEFT JOIN senders sen ON s.sender_id = sen.id
-      LEFT JOIN receivers rec ON s.receiver_id = rec.id
-      ${whereClause}
-    `;
-  }
-
-          const [countResult] = await pool.execute(countQuery, queryParams);
-        const total = countResult[0]?.total || 0;
-
-        // Get paginated results - check if view exists first
-        let dataQuery;
-        try {
-          // Try to use the view first
-          await pool.execute('SELECT 1 FROM v_shipment_details LIMIT 1');
-          
-          // View exists, modify where clause for view
-          const dataWhereClause = whereClause
-            .replace(/sen\./g, 'sender_')
-            .replace(/rec\./g, 'receiver_')
-            .replace(/s\./g, '');
-
-          dataQuery = `
-            SELECT * FROM v_shipment_details
-            ${dataWhereClause}
-            ORDER BY created_at DESC
-            LIMIT ? OFFSET ?
-          `;
-        } catch (viewError) {
-          // View doesn't exist, use direct join query
-          console.log('View not found, using direct query');
-          dataQuery = `
-            SELECT 
-              s.*,
-              sen.name as sender_name,
-              COALESCE(sen.phone, sen.telephone) as sender_telephone,
-              sen.email as sender_email,
-              rec.name as receiver_name,
-              COALESCE(rec.phone, rec.telephone) as receiver_telephone,
-              rec.email as receiver_email,
-              c.base_charge,
-              c.other,
-              c.insurance,
-              c.extra_delivery,
-              c.vat,
-              c.total as charge_total,
-              c.currency,
-              p.payment_method,
-              p.amount_paid,
-              p.payer_account_no
-            FROM shipments s
-            LEFT JOIN senders sen ON s.sender_id = sen.id
-            LEFT JOIN receivers rec ON s.receiver_id = rec.id
-            LEFT JOIN charges c ON s.id = c.shipment_id
-            LEFT JOIN payments p ON s.id = p.shipment_id
-            ${whereClause}
-            ORDER BY s.created_at DESC
-            LIMIT ? OFFSET ?
-          `;
-        }
-
-        // Add limit and offset to query params
-        const dataQueryParams = [...queryParams, limitInt, offsetInt];
-        const [shipments] = await pool.execute(dataQuery, dataQueryParams);
-
-        return { 
-          shipments: shipments || [], 
-          total,
-          page: pageInt,
-          limit: limitInt,
-          totalPages: Math.ceil(total / limitInt)
-        };
-      } catch (error) {
-        console.error('Error in getAllShipments:', error);
-        console.error('Query params:', filters);
-        // Return empty result instead of throwing error
-        return {
-          shipments: [],
-          total: 0,
-          page: 1,
-          limit: 10,
-          totalPages: 0
-        };
-      }
-    },
-
-    // Get shipment by ID
-    getShipmentById: async (id) => {
+      // First, try the simplest possible query to check if data exists
       try {
-        const idInt = parseInt(id);
-        if (!idInt || idInt <= 0) {
-          throw new Error('Invalid shipment ID');
+        const [basicTest] = await pool.execute('SELECT COUNT(*) as count FROM shipments');
+        console.log('Basic shipments count:', basicTest[0].count);
+        
+        if (basicTest[0].count === 0) {
+          console.log('No shipments found in database');
+          return {
+            shipments: [],
+            total: 0,
+            page: pageInt,
+            limit: limitInt,
+            totalPages: 0
+          };
         }
+      } catch (basicError) {
+        console.error('Basic shipments test failed:', basicError.message);
+        throw new Error('Cannot access shipments table: ' + basicError.message);
+      }
 
-        let query;
-        try {
-          // Try view first
-          await pool.execute('SELECT 1 FROM v_shipment_details LIMIT 1');
-          query = 'SELECT * FROM v_shipment_details WHERE id = ?';
-        } catch (viewError) {
-          // Use direct query
-          query = `
-            SELECT 
-              s.*,
-              sen.name as sender_name,
-              COALESCE(sen.phone, sen.telephone) as sender_telephone,
-              sen.email as sender_email,
-              rec.name as receiver_name,
-              COALESCE(rec.phone, rec.telephone) as receiver_telephone,
-              rec.email as receiver_email,
-              c.base_charge,
-              c.other,
-              c.insurance,
-              c.extra_delivery,
-              c.vat,
-              c.total as charge_total,
-              c.currency,
-              p.payment_method,
-              p.amount_paid,
-              p.payer_account_no
-            FROM shipments s
-            LEFT JOIN senders sen ON s.sender_id = sen.id
-            LEFT JOIN receivers rec ON s.receiver_id = rec.id
-            LEFT JOIN charges c ON s.id = c.shipment_id
-            LEFT JOIN payments p ON s.id = p.shipment_id
-            WHERE s.id = ?
-          `;
-        }
+      // Try to use the view first
+      let queryResult;
+      try {
+        console.log('Attempting to use v_shipment_details view...');
+        queryResult = await this.queryWithView(status, search, startDate, endDate, pageInt, limitInt, offsetInt);
+        console.log('View query successful');
+      } catch (viewError) {
+        console.log('View query failed:', viewError.message);
+        console.log('Falling back to basic shipments query...');
+        queryResult = await this.queryBasicShipments(status, search, startDate, endDate, pageInt, limitInt, offsetInt);
+      }
 
-        const [rows] = await pool.execute(query, [idInt]);
-        return rows[0] || null;
-      } catch (error) {
-        console.error('Error in getShipmentById:', error);
+      return queryResult;
+
+    } catch (error) {
+      console.error('getAllShipments error:', error.message);
+      console.error('Stack:', error.stack);
+      throw new Error('Database query failed: ' + error.message);
+    }
+  },
+
+  // Get shipment by ID
+  getShipmentById: async (id) => {
+    try {
+      const shipmentId = parseInt(id);
+      if (!shipmentId || shipmentId <= 0) {
         return null;
       }
-    },
+
+      // Try view first
+      try {
+        const [rows] = await pool.execute('SELECT * FROM v_shipment_details WHERE id = ?', [shipmentId]);
+        return rows[0] || null;
+      } catch (viewError) {
+        // Fallback to basic query
+        const [rows] = await pool.execute(`
+          SELECT 
+            s.*,
+            sen.name as sender_name,
+            rec.name as receiver_name
+          FROM shipments s
+          LEFT JOIN senders sen ON s.sender_id = sen.id
+          LEFT JOIN receivers rec ON s.receiver_id = rec.id
+          WHERE s.id = ?
+        `, [shipmentId]);
+        return rows[0] || null;
+      }
+    } catch (error) {
+      console.error('getShipmentById error:', error);
+      return null;
+    }
+  },
 
   // Get shipment by waybill number
   getByWaybillNumber: async (waybillNo) => {
     try {
-      if (!waybillNo || typeof waybillNo !== 'string') {
-        throw new Error('Invalid waybill number');
+      if (!waybillNo) {
+        return null;
       }
 
-      let query;
+      // Try view first
       try {
-        // Try view first
-        await pool.execute('SELECT 1 FROM v_shipment_details LIMIT 1');
-        query = 'SELECT * FROM v_shipment_details WHERE waybill_no = ?';
+        const [rows] = await pool.execute('SELECT * FROM v_shipment_details WHERE waybill_no = ?', [waybillNo]);
+        return rows[0] || null;
       } catch (viewError) {
-        // Use direct query
-        query = `
+        // Fallback to basic query
+        const [rows] = await pool.execute(`
           SELECT 
             s.*,
             sen.name as sender_name,
-            COALESCE(sen.phone, sen.telephone) as sender_telephone,
-            sen.email as sender_email,
-            rec.name as receiver_name,
-            COALESCE(rec.phone, rec.telephone) as receiver_telephone,
-            rec.email as receiver_email,
-            c.base_charge,
-            c.other,
-            c.insurance,
-            c.extra_delivery,
-            c.vat,
-            c.total as charge_total,
-            c.currency,
-            p.payment_method,
-            p.amount_paid,
-            p.payer_account_no
+            rec.name as receiver_name
           FROM shipments s
           LEFT JOIN senders sen ON s.sender_id = sen.id
           LEFT JOIN receivers rec ON s.receiver_id = rec.id
-          LEFT JOIN charges c ON s.id = c.shipment_id
-          LEFT JOIN payments p ON s.id = p.shipment_id
           WHERE s.waybill_no = ?
-        `;
+        `, [waybillNo]);
+        return rows[0] || null;
       }
-
-      const [rows] = await pool.execute(query, [waybillNo]);
-      return rows[0] || null;
     } catch (error) {
-      console.error('Error in getByWaybillNumber:', error);
+      console.error('getByWaybillNumber error:', error);
       return null;
     }
   },
@@ -279,10 +149,10 @@ const shipmentService = {
       const waybillNo = await generateWaybillNumber();
       const date = new Date().toISOString().split('T')[0];
 
-      // Insert or get sender
+      // Handle sender
       let senderId;
       const [senderExists] = await connection.execute(
-        'SELECT id FROM senders WHERE name = ? AND COALESCE(phone, telephone) = ?',
+        'SELECT id FROM senders WHERE name = ? AND telephone = ?',
         [sender.name, sender.telephone]
       );
 
@@ -290,28 +160,28 @@ const shipmentService = {
         senderId = senderExists[0].id;
       } else {
         const [senderResult] = await connection.execute(`
-          INSERT INTO senders (name, phone, telephone, id_passport_no, company_name, building_floor, 
-                             street_address, estate_town, email, address)
+          INSERT INTO senders (name, telephone, phone, email, address, id_passport_no, 
+                             company_name, building_floor, street_address, estate_town)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
-          sender.name, 
+          sender.name,
           sender.telephone,
           sender.telephone,
-          sender.idPassport || null, 
-          sender.companyName || null, 
-          sender.buildingFloor || null,
-          sender.streetAddress || null, 
-          sender.estateTown || null, 
           sender.email || null,
-          sender.address || null
+          sender.address || null,
+          sender.idPassport || null,
+          sender.companyName || null,
+          sender.buildingFloor || null,
+          sender.streetAddress || null,
+          sender.estateTown || null
         ]);
         senderId = senderResult.insertId;
       }
 
-      // Insert or get receiver
+      // Handle receiver
       let receiverId;
       const [receiverExists] = await connection.execute(
-        'SELECT id FROM receivers WHERE name = ? AND COALESCE(phone, telephone) = ?',
+        'SELECT id FROM receivers WHERE name = ? AND telephone = ?',
         [receiver.name, receiver.telephone]
       );
 
@@ -319,20 +189,20 @@ const shipmentService = {
         receiverId = receiverExists[0].id;
       } else {
         const [receiverResult] = await connection.execute(`
-          INSERT INTO receivers (name, phone, telephone, id_passport_no, company_name, building_floor,
-                               street_address, estate_town, email, address)
+          INSERT INTO receivers (name, telephone, phone, email, address, id_passport_no,
+                               company_name, building_floor, street_address, estate_town)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
-          receiver.name, 
+          receiver.name,
           receiver.telephone,
           receiver.telephone,
-          receiver.idPassport || null, 
-          receiver.companyName || null, 
-          receiver.buildingFloor || null,
-          receiver.streetAddress || null, 
-          receiver.estateTown || null, 
           receiver.email || null,
-          receiver.address || null
+          receiver.address || null,
+          receiver.idPassport || null,
+          receiver.companyName || null,
+          receiver.buildingFloor || null,
+          receiver.streetAddress || null,
+          receiver.estateTown || null
         ]);
         receiverId = receiverResult.insertId;
       }
@@ -344,60 +214,69 @@ const shipmentService = {
                              status, notes, receipt_reference, courier_name, staff_no)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
-        waybillNo, 
-        date, 
-        senderId, 
-        receiverId, 
-        parseInt(quantity) || 1, 
-        parseFloat(weightKg) || 0, 
-        description || '', 
-        parseFloat(commercialValue) || 0, 
+        waybillNo,
+        date,
+        senderId,
+        receiverId,
+        parseInt(quantity) || 1,
+        parseFloat(weightKg) || 0,
+        description || '',
+        parseFloat(commercialValue) || 0,
         deliveryLocation || '',
-        status || 'Pending', 
-        notes || null, 
+        status || 'Pending',
+        notes || null,
         receiptReference || null,
-        courierName || null, 
+        courierName || null,
         staffNo || null
       ]);
 
       const shipmentId = shipmentResult.insertId;
 
-      // Insert charges
-      const baseCharge = parseFloat(charges?.baseCharge) || 0;
-      const other = parseFloat(charges?.other) || 0;
-      const insurance = parseFloat(charges?.insurance) || 0;
-      const extraDelivery = parseFloat(charges?.extraDelivery) || 0;
-      const vat = parseFloat(charges?.vat) || 0;
-      const total = baseCharge + other + insurance + extraDelivery + vat;
+      // Handle charges if charges table exists
+      if (charges) {
+        try {
+          const baseCharge = parseFloat(charges.baseCharge) || 0;
+          const other = parseFloat(charges.other) || 0;
+          const insurance = parseFloat(charges.insurance) || 0;
+          const extraDelivery = parseFloat(charges.extraDelivery) || 0;
+          const vat = parseFloat(charges.vat) || 0;
+          const total = baseCharge + other + insurance + extraDelivery + vat;
 
-      await connection.execute(`
-        INSERT INTO charges (shipment_id, base_charge, other, insurance, 
-                           extra_delivery, vat, total, currency)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        shipmentId, baseCharge, other, insurance,
-        extraDelivery, vat, total, charges?.currency || 'KES'
-      ]);
+          await connection.execute(`
+            INSERT INTO charges (shipment_id, base_charge, other, insurance,
+                               extra_delivery, vat, total, currency)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            shipmentId, baseCharge, other, insurance,
+            extraDelivery, vat, total, charges.currency || 'KES'
+          ]);
+        } catch (chargeError) {
+          console.log('Charges table not available:', chargeError.message);
+        }
+      }
 
-      // Insert payment
-      await connection.execute(`
-        INSERT INTO payments (shipment_id, payer_account_no, payment_method, amount_paid)
-        VALUES (?, ?, ?, ?)
-      `, [
-        shipmentId, 
-        payment?.payerAccountNo || null, 
-        payment?.paymentMethod || 'Cash', 
-        parseFloat(payment?.amountPaid) || total
-      ]);
+      // Handle payment if payments table exists
+      if (payment) {
+        try {
+          await connection.execute(`
+            INSERT INTO payments (shipment_id, payer_account_no, payment_method, amount_paid)
+            VALUES (?, ?, ?, ?)
+          `, [
+            shipmentId,
+            payment.payerAccountNo || null,
+            payment.paymentMethod || 'Cash',
+            parseFloat(payment.amountPaid) || 0
+          ]);
+        } catch (paymentError) {
+          console.log('Payments table not available:', paymentError.message);
+        }
+      }
 
       await connection.commit();
-
-      // Return the created shipment
-      return await this.getShipmentById(shipmentId);
+      return await shipmentService.getShipmentById(shipmentId);
 
     } catch (error) {
       await connection.rollback();
-      console.error('Error in createCompleteShipment:', error);
       throw error;
     } finally {
       connection.release();
@@ -406,134 +285,74 @@ const shipmentService = {
 
   // Update shipment
   updateShipment: async (id, updates) => {
-    const connection = await pool.getConnection();
-    
     try {
-      const idInt = parseInt(id);
-      if (!idInt || idInt <= 0) {
+      const shipmentId = parseInt(id);
+      if (!shipmentId || shipmentId <= 0) {
         throw new Error('Invalid shipment ID');
       }
 
-      await connection.beginTransaction();
-
       // Check if shipment exists
-      const [existingShipment] = await connection.execute(
-        'SELECT id FROM shipments WHERE id = ?', 
-        [idInt]
-      );
-      
-      if (existingShipment.length === 0) {
-        throw new Error('Shipment not found');
+      const [exists] = await pool.execute('SELECT id FROM shipments WHERE id = ?', [shipmentId]);
+      if (exists.length === 0) {
+        return null;
       }
 
-      // Update shipment basic info
-      if (updates.quantity || updates.weightKg || updates.description || 
-          updates.status || updates.deliveryLocation || updates.notes) {
-        
-        const updateFields = [];
-        const updateValues = [];
+      const updateFields = [];
+      const updateValues = [];
 
-        if (updates.quantity !== undefined) {
-          updateFields.push('quantity = ?');
-          updateValues.push(parseInt(updates.quantity) || 1);
-        }
-        if (updates.weightKg !== undefined) {
-          updateFields.push('weight_kg = ?');
-          updateValues.push(parseFloat(updates.weightKg) || 0);
-        }
-        if (updates.description !== undefined) {
-          updateFields.push('description = ?');
-          updateValues.push(updates.description);
-        }
-        if (updates.status !== undefined) {
-          updateFields.push('status = ?');
-          updateValues.push(updates.status);
-        }
-        if (updates.deliveryLocation !== undefined) {
-          updateFields.push('delivery_location = ?');
-          updateValues.push(updates.deliveryLocation);
-        }
-        if (updates.notes !== undefined) {
-          updateFields.push('notes = ?');
-          updateValues.push(updates.notes);
-        }
-
-        if (updateFields.length > 0) {
-          updateFields.push('updated_at = CURRENT_TIMESTAMP');
-          updateValues.push(idInt);
-
-          const query = `UPDATE shipments SET ${updateFields.join(', ')} WHERE id = ?`;
-          await connection.execute(query, updateValues);
-        }
+      // Build dynamic update query
+      if (updates.quantity !== undefined) {
+        updateFields.push('quantity = ?');
+        updateValues.push(parseInt(updates.quantity) || 1);
+      }
+      if (updates.weightKg !== undefined) {
+        updateFields.push('weight_kg = ?');
+        updateValues.push(parseFloat(updates.weightKg) || 0);
+      }
+      if (updates.description !== undefined) {
+        updateFields.push('description = ?');
+        updateValues.push(updates.description);
+      }
+      if (updates.status !== undefined) {
+        updateFields.push('status = ?');
+        updateValues.push(updates.status);
+      }
+      if (updates.deliveryLocation !== undefined) {
+        updateFields.push('delivery_location = ?');
+        updateValues.push(updates.deliveryLocation);
+      }
+      if (updates.notes !== undefined) {
+        updateFields.push('notes = ?');
+        updateValues.push(updates.notes);
       }
 
-      // Update charges if provided
-      if (updates.charges) {
-        const { charges } = updates;
-        const baseCharge = parseFloat(charges.baseCharge) || 0;
-        const other = parseFloat(charges.other) || 0;
-        const insurance = parseFloat(charges.insurance) || 0;
-        const extraDelivery = parseFloat(charges.extraDelivery) || 0;
-        const vat = parseFloat(charges.vat) || 0;
-        const total = baseCharge + other + insurance + extraDelivery + vat;
+      if (updateFields.length > 0) {
+        updateFields.push('updated_at = CURRENT_TIMESTAMP');
+        updateValues.push(shipmentId);
 
-        await connection.execute(`
-          UPDATE charges 
-          SET base_charge = ?, other = ?, insurance = ?, extra_delivery = ?, vat = ?, total = ?
-          WHERE shipment_id = ?
-        `, [baseCharge, other, insurance, extraDelivery, vat, total, idInt]);
+        const updateSql = `UPDATE shipments SET ${updateFields.join(', ')} WHERE id = ?`;
+        await pool.execute(updateSql, updateValues);
       }
 
-      // Update payment if provided
-      if (updates.payment) {
-        const updatePaymentFields = [];
-        const updatePaymentValues = [];
-
-        if (updates.payment.paymentMethod !== undefined) {
-          updatePaymentFields.push('payment_method = ?');
-          updatePaymentValues.push(updates.payment.paymentMethod);
-        }
-        if (updates.payment.payerAccountNo !== undefined) {
-          updatePaymentFields.push('payer_account_no = ?');
-          updatePaymentValues.push(updates.payment.payerAccountNo);
-        }
-        if (updates.payment.amountPaid !== undefined) {
-          updatePaymentFields.push('amount_paid = ?');
-          updatePaymentValues.push(parseFloat(updates.payment.amountPaid) || 0);
-        }
-
-        if (updatePaymentFields.length > 0) {
-          updatePaymentValues.push(idInt);
-          const query = `UPDATE payments SET ${updatePaymentFields.join(', ')} WHERE shipment_id = ?`;
-          await connection.execute(query, updatePaymentValues);
-        }
-      }
-
-      await connection.commit();
-      return await this.getShipmentById(idInt);
-
+      return await this.getShipmentById(shipmentId);
     } catch (error) {
-      await connection.rollback();
-      console.error('Error in updateShipment:', error);
+      console.error('updateShipment error:', error);
       throw error;
-    } finally {
-      connection.release();
     }
   },
 
   // Delete shipment
   deleteShipment: async (id) => {
     try {
-      const idInt = parseInt(id);
-      if (!idInt || idInt <= 0) {
-        throw new Error('Invalid shipment ID');
+      const shipmentId = parseInt(id);
+      if (!shipmentId || shipmentId <= 0) {
+        return false;
       }
 
-      const query = 'DELETE FROM shipments WHERE id = ?';
-      const [result] = await pool.execute(query, [idInt]);
+      const [result] = await pool.execute('DELETE FROM shipments WHERE id = ?', [shipmentId]);
       return result.affectedRows > 0;
     } catch (error) {
-      console.error('Error in deleteShipment:', error);
+      console.error('deleteShipment error:', error);
       return false;
     }
   }
